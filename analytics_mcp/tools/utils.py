@@ -14,13 +14,19 @@
 
 """Common utilities used by the MCP server."""
 
-from typing import Any, Dict
+from typing import Any, Dict, Mapping, Union
 
 from google.analytics import admin_v1beta, data_v1beta, admin_v1alpha
 from google.api_core.gapic_v1.client_info import ClientInfo
+from google.auth import credentials as auth_credentials
+from google.auth.credentials import with_scopes_if_required
 from importlib import metadata
+from pathlib import Path
 import google.auth
+import json
+import os
 import proto
+from google.oauth2 import service_account
 
 
 def _get_package_version_with_fallback():
@@ -45,40 +51,118 @@ _READ_ONLY_ANALYTICS_SCOPE = (
 )
 
 
-def _create_credentials() -> google.auth.credentials.Credentials:
+CredentialsLike = Union[
+    auth_credentials.Credentials, Mapping[str, Any], str, None
+]
+
+
+def _create_credentials() -> auth_credentials.Credentials:
     """Returns Application Default Credentials with read-only scope."""
     (credentials, _) = google.auth.default(scopes=[_READ_ONLY_ANALYTICS_SCOPE])
     return credentials
 
 
-def create_admin_api_client() -> admin_v1beta.AnalyticsAdminServiceAsyncClient:
+def _load_service_account_info(
+    credentials_source: Union[Mapping[str, Any], str]
+) -> Dict[str, Any]:
+    """Loads service account information from a mapping, JSON string, or file path."""
+    if isinstance(credentials_source, Mapping):
+        return dict(credentials_source)
+
+    if isinstance(credentials_source, str):
+        candidate = credentials_source.strip()
+        # First, try to interpret the string as JSON.
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            path = Path(candidate).expanduser()
+            if not path.is_file():
+                raise ValueError(
+                    "Unable to parse provided credentials. "
+                    "Expected a JSON object/string or a path to a service account JSON file."
+                )
+            try:
+                return json.loads(path.read_text())
+            except json.JSONDecodeError as err:
+                raise ValueError(
+                    f"Credentials file at '{path}' does not contain valid JSON."
+                ) from err
+
+    raise TypeError(
+        "Unsupported credential override type. "
+        "Provide a google.auth.credentials.Credentials instance, "
+        "a mapping, a JSON string, or a path to a JSON key file."
+    )
+
+
+def _resolve_credentials(
+    credentials_override: CredentialsLike = None,
+) -> auth_credentials.Credentials:
+    """Returns credentials computed from the override or raises if none provided."""
+    if credentials_override is None:
+        if os.getenv("ANALYTICS_MCP_ALLOW_ADC", "").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            return _create_credentials()
+        raise RuntimeError(
+            "No credentials supplied. Pass the 'credentials' argument or set "
+            "ANALYTICS_MCP_ALLOW_ADC=true to permit Application Default Credentials."
+        )
+
+    if isinstance(credentials_override, auth_credentials.Credentials):
+        return with_scopes_if_required(
+            credentials_override, [_READ_ONLY_ANALYTICS_SCOPE]
+        )
+
+    service_account_info = _load_service_account_info(credentials_override)
+    return service_account.Credentials.from_service_account_info(
+        service_account_info, scopes=[_READ_ONLY_ANALYTICS_SCOPE]
+    )
+
+
+def create_admin_api_client(
+    credentials_override: CredentialsLike = None,
+) -> admin_v1beta.AnalyticsAdminServiceAsyncClient:
     """Returns a properly configured Google Analytics Admin API async client.
 
-    Uses Application Default Credentials with read-only scope.
+    Uses Application Default Credentials with read-only scope unless a specific
+    credential override is supplied.
     """
     return admin_v1beta.AnalyticsAdminServiceAsyncClient(
-        client_info=_CLIENT_INFO, credentials=_create_credentials()
+        client_info=_CLIENT_INFO,
+        credentials=_resolve_credentials(credentials_override),
     )
 
 
-def create_data_api_client() -> data_v1beta.BetaAnalyticsDataAsyncClient:
+def create_data_api_client(
+    credentials_override: CredentialsLike = None,
+) -> data_v1beta.BetaAnalyticsDataAsyncClient:
     """Returns a properly configured Google Analytics Data API async client.
 
-    Uses Application Default Credentials with read-only scope.
+    Uses Application Default Credentials with read-only scope unless a specific
+    credential override is supplied.
     """
     return data_v1beta.BetaAnalyticsDataAsyncClient(
-        client_info=_CLIENT_INFO, credentials=_create_credentials()
+        client_info=_CLIENT_INFO,
+        credentials=_resolve_credentials(credentials_override),
     )
 
 
-def create_admin_alpha_api_client() -> (
+def create_admin_alpha_api_client(
+    credentials_override: CredentialsLike = None,
+) -> (
     admin_v1alpha.AnalyticsAdminServiceAsyncClient
 ):
     """Returns a properly configured Google Analytics Admin API (alpha) async client.
-    Uses Application Default Credentials with read-only scope.
+    Uses Application Default Credentials with read-only scope unless a specific
+    credential override is supplied.
     """
     return admin_v1alpha.AnalyticsAdminServiceAsyncClient(
-        client_info=_CLIENT_INFO, credentials=_create_credentials()
+        client_info=_CLIENT_INFO,
+        credentials=_resolve_credentials(credentials_override),
     )
 
 

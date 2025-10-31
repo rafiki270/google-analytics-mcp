@@ -18,6 +18,7 @@ from typing import Any, Dict, List
 
 from analytics_mcp.coordinator import mcp
 from analytics_mcp.tools.utils import (
+    CredentialsLike,
     construct_property_rn,
     create_data_api_client,
     proto_to_dict,
@@ -87,6 +88,7 @@ async def run_realtime_report(
     limit: int = None,
     offset: int = None,
     return_property_quota: bool = False,
+    credentials: CredentialsLike = None,
 ) -> Dict[str, Any]:
     """Runs a Google Analytics Data API realtime report.
 
@@ -130,6 +132,10 @@ async def run_realtime_report(
           reports, following the guide at
           https://developers.google.com/analytics/devguides/reporting/data/v1/basics#pagination.
         return_property_quota: Whether to return realtime property quota in the response.
+        credentials: Optional override for the credentials used to call the
+          Analytics Data API. Provide a google.auth.credentials.Credentials
+          instance, a mapping/dict with service account JSON, a JSON string, or
+          a path to a service account key file.
     """
     request = data_v1beta.RunRealtimeReportRequest(
         property=construct_property_rn(property_id),
@@ -158,7 +164,9 @@ async def run_realtime_report(
     if offset:
         request.offset = offset
 
-    response = await create_data_api_client().run_realtime_report(request)
+    response = await create_data_api_client(
+        credentials_override=credentials
+    ).run_realtime_report(request)
     return proto_to_dict(response)
 
 

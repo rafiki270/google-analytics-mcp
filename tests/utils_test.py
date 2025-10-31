@@ -14,9 +14,14 @@
 
 """Test cases for the utils module."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from analytics_mcp.tools import utils
+from google.auth import credentials as auth_credentials
 
 
 class TestUtils(unittest.TestCase):
@@ -68,3 +73,76 @@ class TestUtils(unittest.TestCase):
             msg="Resource name with more than 2 components should fail",
         ):
             utils.construct_property_rn("properties/123/abc")
+
+    def test_load_service_account_info_with_mapping(self):
+        """Mapping input should be returned as a new dictionary."""
+        mapping = {"type": "service_account", "project_id": "proj"}
+        result = utils._load_service_account_info(mapping)
+        self.assertEqual(result, mapping)
+        self.assertIsNot(result, mapping, "Result should be a copy, not the original mapping")
+
+    def test_load_service_account_info_with_json_string(self):
+        """JSON string input should be parsed into a dictionary."""
+        payload = {"type": "service_account", "project_id": "proj"}
+        result = utils._load_service_account_info(json.dumps(payload))
+        self.assertEqual(result, payload)
+
+    def test_load_service_account_info_with_file_path(self):
+        """File path input should load JSON content."""
+        payload = {"type": "service_account", "project_id": "proj"}
+        with tempfile.NamedTemporaryFile("w", delete=False) as tmp:
+            json.dump(payload, tmp)
+            tmp_path = tmp.name
+        try:
+            result = utils._load_service_account_info(tmp_path)
+            self.assertEqual(result, payload)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    def test_load_service_account_info_with_invalid_string(self):
+        """Non-existent paths should raise a ValueError."""
+        with self.assertRaises(ValueError):
+            utils._load_service_account_info("nonexistent_credentials.json")
+
+    def test_resolve_credentials_requires_override_by_default(self):
+        """Without overrides or env flags, credentials must be supplied."""
+        with self.assertRaises(RuntimeError):
+            utils._resolve_credentials()
+
+    @mock.patch("analytics_mcp.tools.utils.with_scopes_if_required")
+    def test_resolve_credentials_with_credentials_instance(self, mock_with_scopes):
+        """Credentials overrides should be scoped if required."""
+        supplied_credentials = mock.create_autospec(auth_credentials.Credentials)
+        scoped_credentials = mock.Mock()
+        mock_with_scopes.return_value = scoped_credentials
+
+        resolved = utils._resolve_credentials(supplied_credentials)
+
+        mock_with_scopes.assert_called_once()
+        self.assertIs(resolved, scoped_credentials)
+
+    @mock.patch("analytics_mcp.tools.utils.service_account.Credentials.from_service_account_info")
+    def test_resolve_credentials_with_mapping_override(self, mock_from_info):
+        """Mappings should be converted into service account credentials."""
+        mapping = {"type": "service_account", "project_id": "proj"}
+        fake_credentials = mock.create_autospec(auth_credentials.Credentials)
+        mock_from_info.return_value = fake_credentials
+
+        resolved = utils._resolve_credentials(mapping)
+
+        mock_from_info.assert_called_once()
+        self.assertIs(resolved, fake_credentials)
+
+    @mock.patch("analytics_mcp.tools.utils.google.auth.default")
+    def test_resolve_credentials_env_flag_allows_adc(self, mock_default):
+        """Setting ANALYTICS_MCP_ALLOW_ADC should fall back to ADC."""
+        fake_credentials = mock.create_autospec(auth_credentials.Credentials)
+        mock_default.return_value = (fake_credentials, None)
+
+        with mock.patch.dict(
+            "os.environ", {"ANALYTICS_MCP_ALLOW_ADC": "true"}, clear=False
+        ):
+            resolved = utils._resolve_credentials()
+
+        self.assertIs(resolved, fake_credentials)
+        mock_default.assert_called_once()

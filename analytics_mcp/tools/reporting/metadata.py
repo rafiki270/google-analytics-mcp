@@ -18,6 +18,7 @@ from typing import Any, Dict, List
 
 from analytics_mcp.coordinator import mcp
 from analytics_mcp.tools.utils import (
+    CredentialsLike,
     construct_property_rn,
     create_data_api_client,
     proto_to_dict,
@@ -320,6 +321,7 @@ def get_order_bys_hints():
 )
 async def get_custom_dimensions_and_metrics(
     property_id: int | str,
+    credentials: CredentialsLike = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Returns the property's custom dimensions and metrics.
 
@@ -327,11 +329,14 @@ async def get_custom_dimensions_and_metrics(
         property_id: The Google Analytics property ID. Accepted formats are:
           - A number
           - A string consisting of 'properties/' followed by a number
-
+        credentials: Optional override for the credentials used to call the
+          Analytics Data API. Provide a google.auth.credentials.Credentials
+          instance, a mapping/dict with service account JSON, a JSON string, or
+          a path to a service account key file.
     """
-    metadata = await create_data_api_client().get_metadata(
-        name=f"{construct_property_rn(property_id)}/metadata"
-    )
+    metadata = await create_data_api_client(
+        credentials_override=credentials
+    ).get_metadata(name=f"{construct_property_rn(property_id)}/metadata")
     custom_metrics = [
         proto_to_dict(metric)
         for metric in metadata.metrics

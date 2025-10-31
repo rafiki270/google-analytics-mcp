@@ -114,6 +114,52 @@ following message. You'll need this for the next step!
 Credentials saved to file: [PATH_TO_CREDENTIALS_JSON]
 ```
 
+#### Provide credentials dynamically per request
+
+By default, the MCP server uses your Application Default Credentials. If you
+prefer to reuse a single server instance with different Google Analytics
+accounts, each tool exposed by the server now accepts an optional
+`credentials` argument. Pass a service account key in any of the following
+formats to override the credentials just for that request:
+
+- A dictionary / mapping containing the service account JSON content.
+- A JSON string with the contents of the service account key.
+- A filesystem path pointing to a service account JSON file.
+
+Example:
+
+```python
+await run_report(
+    property_id="123456789",
+    date_ranges=[{"start_date": "2025-01-01", "end_date": "2025-01-31"}],
+    dimensions=["sessionSourceMedium"],
+    metrics=["activeUsers"],
+    credentials="/path/to/client-service-account.json",
+)
+```
+
+The supplied credentials must include the
+`https://www.googleapis.com/auth/analytics.readonly` scope. When no override is
+provided, the server returns an error so that requests never fall back to your
+application default credentials. If you really need the legacy behaviour, opt
+in explicitly by setting `ANALYTICS_MCP_ALLOW_ADC=true` before launching the
+server.
+
+### Launch locally with Make 🛠️
+
+Start the server from the repository with:
+
+```shell
+make launch
+```
+
+If you want to allow the server to fall back to Application Default Credentials,
+set `ANALYTICS_MCP_ALLOW_ADC=true` (and any other variables you need) before running the command:
+
+```shell
+ANALYTICS_MCP_ALLOW_ADC=true make launch
+```
+
 ### Configure Gemini
 
 1.  Install [Gemini

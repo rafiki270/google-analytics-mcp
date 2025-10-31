@@ -18,6 +18,7 @@ from typing import Any, Dict, List
 
 from analytics_mcp.coordinator import mcp
 from analytics_mcp.tools.utils import (
+    CredentialsLike,
     construct_property_rn,
     create_admin_api_client,
     create_admin_alpha_api_client,
@@ -27,12 +28,23 @@ from google.analytics import admin_v1beta, admin_v1alpha
 
 
 @mcp.tool()
-async def get_account_summaries() -> List[Dict[str, Any]]:
-    """Retrieves information about the user's Google Analytics accounts and properties."""
+async def get_account_summaries(
+    credentials: CredentialsLike = None,
+) -> List[Dict[str, Any]]:
+    """Retrieves information about the user's Google Analytics accounts and properties.
+
+    Args:
+        credentials: Optional override for the credentials used to call the
+          Analytics Admin API. Provide a google.auth.credentials.Credentials
+          instance, a mapping/dict with service account JSON, a JSON string, or
+          a path to a service account key file.
+    """
 
     # Uses an async list comprehension so the pager returned by
     # list_account_summaries retrieves all pages.
-    summary_pager = await create_admin_api_client().list_account_summaries()
+    summary_pager = await create_admin_api_client(
+        credentials_override=credentials
+    ).list_account_summaries()
     all_pages = [
         proto_to_dict(summary_page) async for summary_page in summary_pager
     ]
@@ -40,35 +52,47 @@ async def get_account_summaries() -> List[Dict[str, Any]]:
 
 
 @mcp.tool(title="List links to Google Ads accounts")
-async def list_google_ads_links(property_id: int | str) -> List[Dict[str, Any]]:
+async def list_google_ads_links(
+    property_id: int | str, credentials: CredentialsLike = None
+) -> List[Dict[str, Any]]:
     """Returns a list of links to Google Ads accounts for a property.
 
     Args:
         property_id: The Google Analytics property ID. Accepted formats are:
           - A number
           - A string consisting of 'properties/' followed by a number
+        credentials: Optional override for the credentials used to call the
+          Analytics Admin API. Provide a google.auth.credentials.Credentials
+          instance, a mapping/dict with service account JSON, a JSON string, or
+          a path to a service account key file.
     """
     request = admin_v1beta.ListGoogleAdsLinksRequest(
         parent=construct_property_rn(property_id)
     )
     # Uses an async list comprehension so the pager returned by
     # list_google_ads_links retrieves all pages.
-    links_pager = await create_admin_api_client().list_google_ads_links(
-        request=request
-    )
+    links_pager = await create_admin_api_client(
+        credentials_override=credentials
+    ).list_google_ads_links(request=request)
     all_pages = [proto_to_dict(link_page) async for link_page in links_pager]
     return all_pages
 
 
 @mcp.tool(title="Gets details about a property")
-async def get_property_details(property_id: int | str) -> Dict[str, Any]:
+async def get_property_details(
+    property_id: int | str, credentials: CredentialsLike = None
+) -> Dict[str, Any]:
     """Returns details about a property.
     Args:
         property_id: The Google Analytics property ID. Accepted formats are:
           - A number
           - A string consisting of 'properties/' followed by a number
+        credentials: Optional override for the credentials used to call the
+          Analytics Admin API. Provide a google.auth.credentials.Credentials
+          instance, a mapping/dict with service account JSON, a JSON string, or
+          a path to a service account key file.
     """
-    client = create_admin_api_client()
+    client = create_admin_api_client(credentials_override=credentials)
     request = admin_v1beta.GetPropertyRequest(
         name=construct_property_rn(property_id)
     )
@@ -78,7 +102,7 @@ async def get_property_details(property_id: int | str) -> Dict[str, Any]:
 
 @mcp.tool(title="Gets property annotations for a property")
 async def list_property_annotations(
-    property_id: int | str,
+    property_id: int | str, credentials: CredentialsLike = None
 ) -> List[Dict[str, Any]]:
     """Returns annotations for a property.
 
@@ -90,14 +114,19 @@ async def list_property_annotations(
         property_id: The Google Analytics property ID. Accepted formats are:
           - A number
           - A string consisting of 'properties/' followed by a number
+        credentials: Optional override for the credentials used to call the
+          Analytics Admin API (alpha). Provide a
+          google.auth.credentials.Credentials instance, a mapping/dict with
+          service account JSON, a JSON string, or a path to a service account
+          key file.
     """
     request = admin_v1alpha.ListReportingDataAnnotationsRequest(
         parent=construct_property_rn(property_id)
     )
     annotations_pager = (
-        await create_admin_alpha_api_client().list_reporting_data_annotations(
-            request=request
-        )
+        await create_admin_alpha_api_client(
+            credentials_override=credentials
+        ).list_reporting_data_annotations(request=request)
     )
     all_pages = [
         proto_to_dict(annotation_page)
