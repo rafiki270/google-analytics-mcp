@@ -1,0 +1,14 @@
+.git
+.gitignore
+.venv
+.mypy_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+build
+dist
+*.egg-info
+.nox
+.pytest_cache
+.DS_Store

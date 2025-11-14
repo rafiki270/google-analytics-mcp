@@ -147,18 +147,28 @@ server.
 
 ### Launch locally with Make 🛠️
 
-Start the server from the repository with:
+`make launch` builds a Docker image, updates your Codex MCP config (if the
+`codex` CLI is installed), and runs the server inside the container. Provide any
+runtime credentials via `DOCKER_RUN_FLAGS` so they are passed to `docker run`:
 
 ```shell
-make launch
+make DOCKER_RUN_FLAGS="-e GOOGLE_APPLICATION_CREDENTIALS=/creds.json -v $HOME/keys/analytics.json:/creds.json:ro" launch
 ```
 
 If you want to allow the server to fall back to Application Default Credentials,
-set `ANALYTICS_MCP_ALLOW_ADC=true` (and any other variables you need) before running the command:
+add `-e ANALYTICS_MCP_ALLOW_ADC=true` to `DOCKER_RUN_FLAGS`.
+
+To skip Docker entirely and run the server with your active Python
+environment, use:
 
 ```shell
-ANALYTICS_MCP_ALLOW_ADC=true make launch
+make launch-local
 ```
+
+`make launch` automatically attempts to register the MCP server with Codex using
+`codex mcp add`. Set `CODEX=/path/to/codex` or `MCP_SERVER_NAME=custom-name` if
+you need to override the defaults. If the Codex CLI is not available, the target
+falls back to launching the container without modifying your configuration.
 
 ### Configure Gemini
 
